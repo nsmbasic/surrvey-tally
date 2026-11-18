@@ -123,3 +123,74 @@ test('무르기: 승리한 판도 물릴 수 있고, 빈 판에서는 변화 없
   const e = G.create(10, 5);
   assert.equal(G.undo(e), e);
 });
+
+// ---- 컴퓨터 상대 ----
+test('AI: 빈 판에서는 판 중앙 근처에 둔다', () => {
+  const [r, c] = plain(G.aiMove(G.create(10, 5)));
+  assert.ok(r >= 4 && r <= 5 && c >= 4 && c <= 5, `${r},${c}`);
+});
+
+test('AI: 내가 이길 수 있으면 바로 이긴다', () => {
+  // 흑 (0,0)~(0,3) 4개, 흑 차례
+  const s = play(G.create(10, 5), [[0,0],[5,0],[0,1],[5,2],[0,2],[5,4],[0,3],[7,7]]);
+  assert.equal(s.turn, 1);
+  assert.deepEqual(plain(G.aiMove(s)), [0, 4]);
+});
+
+test('AI: 상대가 4개를 만들면 막는다', () => {
+  // 흑 (0,0)~(0,3) 4개, 백 차례 → (0,4) 를 막아야 한다
+  const s = play(G.create(10, 5), [[0,0],[5,0],[0,1],[5,2],[0,2],[5,4],[0,3]]);
+  assert.equal(s.turn, 2);
+  assert.deepEqual(plain(G.aiMove(s)), [0, 4]);
+});
+
+test('AI: 3목에서 상대의 2개가 이어지면 막는다', () => {
+  // 흑 (4,4)(4,5), 백 차례. 흑이 3개를 잇는 자리를 막아야 한다
+  const s = play(G.create(10, 3), [[4,4],[0,0],[4,5]]);
+  const [r, c] = plain(G.aiMove(s));
+  assert.ok(r === 4 && (c === 3 || c === 6), `${r},${c}`);
+});
+
+test('AI: 가운데가 빈 갈라진 4개도 막는다', () => {
+  // 흑 (0,0)(0,1)(0,3)(0,4), 백 차례 → (0,2)
+  const s = play(G.create(10, 5), [[0,0],[5,0],[0,1],[5,2],[0,3],[5,4],[0,4]]);
+  assert.deepEqual(plain(G.aiMove(s)), [0, 2]);
+});
+
+test('AI: 끝난 판·가득 찬 판에는 null, 항상 빈 칸을 고른다', () => {
+  const win = play(G.create(10, 3), [[0,0],[1,0],[0,1],[1,1],[0,2]]);
+  assert.equal(G.aiMove(win), null);
+  const draw = play(G.create(3, 3), [[0,0],[0,1],[0,2],[1,1],[1,0],[2,0],[1,2],[2,2],[2,1]]);
+  assert.equal(G.aiMove(draw), null);
+  let s = G.create(10, 5);
+  while (!s.winner && !s.draw && s.moves.length < 30) {
+    const [r, c] = G.aiMove(s);
+    assert.equal(s.board[r * 10 + c], 0);
+    s = G.place(s, r, c);
+  }
+});
+
+test('AI끼리 끝까지 두면 정상적으로 끝난다 (오목·3목)', () => {
+  for (const winLen of [5, 3]) {
+    let s = G.create(10, winLen);
+    for (let i = 0; i < 100 && !s.winner && !s.draw; i++) {
+      const [r, c] = G.aiMove(s);
+      const next = G.place(s, r, c);
+      assert.notEqual(next, s, '둘 수 없는 칸을 골랐다');
+      s = next;
+    }
+    assert.ok(s.winner || s.draw);
+    assert.ok(s.moves.length >= winLen * 2 - 1 || s.draw);
+  }
+});
+
+test('AI: 사람이 한 줄로 4개를 만들 때마다 막으면 지지 않는다 (흑 사람 5목)', () => {
+  // 사람(흑)이 한 줄로만 이으려는 단순한 공격에 AI(백)가 져서는 안 된다.
+  let s = G.create(10, 5);
+  for (let c = 0; c < 10 && !s.winner && !s.draw; c++) {
+    s = G.place(s, 4, c);
+    if (s.winner || s.draw) break;
+    s = G.place(s, ...G.aiMove(s));
+  }
+  assert.notEqual(s.winner, 1);
+});

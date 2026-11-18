@@ -36,6 +36,8 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 <main>
 <h1>10×10 오목</h1>
 <div class="bar">
+<label for="opp">상대</label>
+<select id="opp"><option value="pvp">두 사람</option><option value="ai-white">컴퓨터 (내가 흑·선공)</option><option value="ai-black">컴퓨터 (내가 백·후공)</option></select>
 <label for="mode">규칙</label>
 <select id="mode"><option value="5">오목 (5목)</option><option value="3">3목</option></select>
 <button type="button" class="ctl" id="undo">무르기</button>
@@ -43,7 +45,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 </div>
 <p id="status" role="status" aria-live="polite"></p>
 <div id="board" role="grid" aria-label="오목판"></div>
-<p class="note">한 기기에서 두 사람이 번갈아 둡니다. 흑이 먼저 둡니다. 가로·세로·대각선으로 먼저 목표 개수 이상을 이으면 이깁니다. 판이 가득 차면 무승부입니다.</p>
+<p class="note">한 기기에서 두 사람이 번갈아 두거나, 컴퓨터와 둘 수 있습니다. 흑이 먼저 둡니다. 가로·세로·대각선으로 먼저 목표 개수 이상을 이으면 이깁니다. 판이 가득 차면 무승부입니다.</p>
 </main>
 <script id="game-logic">
 /* 게임 로직: 화면(DOM)을 쓰지 않는다. test/game.test.js 가 이 블록을 그대로 꺼내 시험한다. */
@@ -99,7 +101,49 @@ var Game = (function () {
     return s;
   }
 
-  return { create: create, place: place, undo: undo };
+  // 칸 (r,c)에 p 가 돌을 놓는다고 가정할 때의 점수.
+  // 칸을 지나는 '승리 길이 창'(가로·세로·대각선) 중 상대 돌이 없는 것마다, 내 돌 수가 많을수록 크게 더한다.
+  function cellScore(board, size, winLen, r, c, p) {
+    var q = p === 1 ? 2 : 1, total = 0;
+    for (var d = 0; d < DIRS.length; d++) {
+      var dr = DIRS[d][0], dc = DIRS[d][1];
+      for (var s = 0; s < winLen; s++) {
+        var sr = r - dr * s, sc = c - dc * s;
+        var er = sr + dr * (winLen - 1), ec = sc + dc * (winLen - 1);
+        if (sr < 0 || sc < 0 || er < 0 || ec < 0 || sr >= size || sc >= size || er >= size || ec >= size) continue;
+        var own = 0, blocked = false;
+        for (var k = 0; k < winLen; k++) {
+          var rr = sr + dr * k, cc = sc + dc * k;
+          var v = (rr === r && cc === c) ? p : board[rr * size + cc];
+          if (v === q) { blocked = true; break; }
+          if (v === p) own++;
+        }
+        if (blocked) continue;
+        total += own >= winLen ? 1e7 : Math.pow(8, own);
+      }
+    }
+    return total;
+  }
+
+  // 컴퓨터가 둘 칸 [r,c] (현재 차례 기준). 둘 수 없으면 null.
+  // 우선순위는 점수로 자연스럽게 정해진다: 내가 이기는 수 > 상대가 이기는 수 막기 > 공격·수비 점수 합. 같으면 판 중앙에 가까운 칸.
+  function aiMove(state) {
+    if (state.winner || state.draw) return null;
+    var n = state.size, me = state.turn, opp = me === 1 ? 2 : 1, mid = (n - 1) / 2;
+    var best = null, bestScore = -Infinity;
+    for (var r = 0; r < n; r++) {
+      for (var c = 0; c < n; c++) {
+        if (state.board[r * n + c] !== 0) continue;
+        var score = cellScore(state.board, n, state.winLen, r, c, me)
+          + 0.8 * cellScore(state.board, n, state.winLen, r, c, opp)
+          - (Math.abs(r - mid) + Math.abs(c - mid)) * 0.01;
+        if (score > bestScore) { bestScore = score; best = [r, c]; }
+      }
+    }
+    return best;
+  }
+
+  return { create: create, place: place, undo: undo, aiMove: aiMove };
 })();
 </script>
 <script>
@@ -109,8 +153,12 @@ var Game = (function () {
   var boardEl = document.getElementById('board');
   var statusEl = document.getElementById('status');
   var modeEl = document.getElementById('mode');
-  var state, cells = [];
+  var oppEl = document.getElementById('opp');
+  var state, cells = [], aiPlayer = 0, timer = null;
   var NAME = { 1: '흑', 2: '백' };
+
+  function label(p) { return NAME[p] + (aiPlayer ? (p === aiPlayer ? '(컴퓨터)' : '(나)') : ''); }
+  function aiTurn() { return !!aiPlayer && state.turn === aiPlayer && !state.winner && !state.draw; }
 
   function build() {
     boardEl.textContent = '';
@@ -140,23 +188,48 @@ var Game = (function () {
       var v = state.board[i], r = Math.floor(i / SIZE), c = i % SIZE;
       b.className = 'cell' + (v ? ' s' + v : '') + (last && last[0] === r && last[1] === c ? ' last' : '') + (winSet[i] ? ' win' : '');
       b.firstChild.hidden = !v;
-      b.disabled = !!(v || over);
+      b.disabled = !!(v || over || aiTurn());
       b.setAttribute('aria-label', (r + 1) + '행 ' + (c + 1) + '열' + (v ? ' ' + NAME[v] : ' 빈 칸'));
     });
-    statusEl.textContent = state.winner ? NAME[state.winner] + ' 승리!' : state.draw ? '무승부입니다.' : NAME[state.turn] + ' 차례';
+    statusEl.textContent = state.winner ? label(state.winner) + ' 승리!' : state.draw ? '무승부입니다.' : aiTurn() ? '컴퓨터가 두는 중…' : label(state.turn) + ' 차례';
   }
 
-  function reset() { state = Game.create(SIZE, Number(modeEl.value)); render(); }
+  // 컴퓨터 차례이면 잠깐 뒤에 둔다.
+  function maybeAi() {
+    clearTimeout(timer);
+    if (!aiTurn()) return;
+    timer = setTimeout(function () {
+      var mv = Game.aiMove(state);
+      if (mv) state = Game.place(state, mv[0], mv[1]);
+      render();
+    }, 400);
+  }
+
+  function reset() {
+    aiPlayer = oppEl.value === 'ai-white' ? 2 : oppEl.value === 'ai-black' ? 1 : 0;
+    state = Game.create(SIZE, Number(modeEl.value));
+    render();
+    maybeAi();
+  }
 
   boardEl.addEventListener('click', function (e) {
     var b = e.target.closest('.cell');
-    if (!b) return;
+    if (!b || aiTurn()) return;
     state = Game.place(state, Number(b.dataset.r), Number(b.dataset.c));
     render();
+    maybeAi();
   });
-  document.getElementById('undo').addEventListener('click', function () { state = Game.undo(state); render(); });
+  document.getElementById('undo').addEventListener('click', function () {
+    clearTimeout(timer);
+    state = Game.undo(state);
+    // 컴퓨터와 둘 때는 내 차례가 될 때까지(보통 2수) 물린다.
+    if (aiPlayer && state.turn === aiPlayer && state.moves.length > 0) state = Game.undo(state);
+    render();
+    maybeAi();
+  });
   document.getElementById('reset').addEventListener('click', reset);
   modeEl.addEventListener('change', reset);
+  oppEl.addEventListener('change', reset);
   build();
   reset();
 })();
