@@ -4,155 +4,161 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'none'; base-uri 'none'">
-<title>설문 집계기</title>
+<title>10×10 오목</title>
 <style>
-:root{--bg:#f6f7f9;--fg:#1c2330;--muted:#5d6676;--card:#fff;--line:#d9dde4;--accent:#1f5fbf;--head:#eef1f6}
-@media (prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e8ebf0;--muted:#9aa3b2;--card:#1d2128;--line:#343b47;--accent:#6ea2f0;--head:#252b34}}
+:root{--bg:#f6f7f9;--fg:#1c2330;--muted:#5d6676;--card:#fff;--line:#d9dde4;--accent:#1f5fbf;--board:#dcb35c;--grid:#7a5a1e}
+@media (prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e8ebf0;--muted:#9aa3b2;--card:#1d2128;--line:#343b47;--accent:#6ea2f0}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif}
-main{max-width:860px;margin:0 auto;padding:24px 16px 48px}
-h1{font-size:1.4rem;margin:0 0 4px}
-p.lead{margin:0 0 16px;color:var(--muted)}
-textarea{width:100%;height:11rem;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;resize:vertical;white-space:pre;overflow:auto}
-textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.bar{display:flex;gap:12px;align-items:center;margin:8px 0 20px;flex-wrap:wrap}
-button{font:inherit;padding:6px 14px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
-#status{color:var(--muted);font-size:.9rem}
-.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--card)}
-table{border-collapse:collapse;width:100%;min-width:480px}
-th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
-th:first-child,td:first-child{text-align:left;word-break:break-word}
-thead th{background:var(--head);font-weight:600}
-tbody tr:last-child td{border-bottom:0}
-.rules{margin-top:24px;color:var(--muted);font-size:.875rem}
-.rules ul{padding-left:1.2em;margin:4px 0}
+main{max-width:560px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.4rem;margin:0 0 12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+select,button.ctl{font:inherit;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#status{font-weight:600;min-height:1.5em;margin:0 0 12px}
+#board{display:grid;grid-template-columns:repeat(10,1fr);width:100%;aspect-ratio:1;background:var(--board);border:2px solid var(--grid);border-radius:6px;padding:0;touch-action:manipulation}
+.cell{position:relative;padding:0;margin:0;border:0;background:transparent;cursor:pointer;min-width:0}
+.cell::before,.cell::after{content:"";position:absolute;background:var(--grid);pointer-events:none}
+.cell::before{left:0;right:0;top:50%;height:1px}
+.cell::after{top:0;bottom:0;left:50%;width:1px}
+.cell:disabled{cursor:default}
+.cell:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;z-index:2}
+.stone{position:absolute;inset:12%;border-radius:50%;z-index:1;box-shadow:0 1px 2px rgba(0,0,0,.45)}
+.s1 .stone{background:#111;border:1px solid #000}
+.s2 .stone{background:#fafafa;border:1px solid #666}
+.cell:not(.s1):not(.s2):not(:disabled):hover::before{height:3px;background:rgba(0,0,0,.35)}
+.last .stone::after{content:"";position:absolute;inset:36%;border-radius:50%;background:#e03131}
+.win .stone{outline:3px solid #e03131;outline-offset:1px}
+.note{margin-top:16px;color:var(--muted);font-size:.875rem}
 </style>
 </head>
 <body>
 <main>
-<h1>설문 집계기</h1>
-<p class="lead">엑셀에서 머리글 줄까지 복사해 아래에 붙여넣으세요. 붙여넣은 데이터는 이 브라우저 안에서만 계산되며 밖으로 보내거나 저장하지 않습니다.</p>
-<label for="input" hidden>설문 데이터</label>
-<textarea id="input" spellcheck="false" placeholder="응답번호&#9;문항1&#9;문항2&#10;1&#9;5&#9;3&#10;2&#9;4&#9;"></textarea>
-<div class="bar"><button type="button" id="clear">지우기</button><span id="status" role="status" aria-live="polite"></span></div>
-<div class="wrap" id="result" hidden>
-<table>
-<thead><tr><th scope="col">문항</th><th scope="col">유효 응답</th><th scope="col">평균</th><th scope="col">빈 응답</th><th scope="col">제외</th></tr></thead>
-<tbody id="rows"></tbody>
-</table>
+<h1>10×10 오목</h1>
+<div class="bar">
+<label for="mode">규칙</label>
+<select id="mode"><option value="5">오목 (5목)</option><option value="3">3목</option></select>
+<button type="button" class="ctl" id="undo">무르기</button>
+<button type="button" class="ctl" id="reset">새 게임</button>
 </div>
-<div class="rules">
-<strong>집계 기준</strong>
-<ul>
-<li>첫 열(응답번호)은 집계하지 않습니다.</li>
-<li>앞뒤 공백을 지운 값이 1·2·3·4·5이면 유효, 비었거나 공백뿐이면 빈 응답, 그 밖의 값은 제외입니다.</li>
-<li>칸 수가 머리글보다 모자란 줄은 모자란 칸을 빈 응답으로 셉니다.</li>
-<li>평균은 유효 응답의 합 ÷ 유효 응답 수(소수 셋째 자리에서 반올림), 유효 응답이 없으면 “-”입니다.</li>
-</ul>
-</div>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="board" role="grid" aria-label="오목판"></div>
+<p class="note">한 기기에서 두 사람이 번갈아 둡니다. 흑이 먼저 둡니다. 가로·세로·대각선으로 먼저 목표 개수 이상을 이으면 이깁니다. 판이 가득 차면 무승부입니다.</p>
 </main>
-<script id="tally-logic">
-/* 계산 로직: 화면(DOM)을 전혀 쓰지 않는다. test/tally.test.js 가 이 블록을 그대로 꺼내 시험한다. */
-var Tally = (function () {
+<script id="game-logic">
+/* 게임 로직: 화면(DOM)을 쓰지 않는다. test/game.test.js 가 이 블록을 그대로 꺼내 시험한다. */
+var Game = (function () {
   'use strict';
+  var DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
 
-  // 칸 하나를 판정한다: 'valid'(값 포함) / 'blank' / 'excluded'
-  function parseCell(raw) {
-    var s = (raw === undefined || raw === null) ? '' : String(raw).trim();
-    if (s === '') return { kind: 'blank' };
-    if (s === '1' || s === '2' || s === '3' || s === '4' || s === '5') {
-      return { kind: 'valid', value: Number(s) };
+  // 새 판. 흑(1)이 먼저 둔다.
+  function create(size, winLen) {
+    var board = [];
+    for (var i = 0; i < size * size; i++) board.push(0);
+    return { size: size, winLen: winLen, board: board, turn: 1, winner: 0, line: [], draw: false, moves: [] };
+  }
+
+  // (r,c)에 방금 둔 돌이 만든 승리 줄을 찾는다. 없으면 [].
+  function findLine(board, size, winLen, r, c) {
+    var p = board[r * size + c];
+    if (!p) return [];
+    for (var d = 0; d < DIRS.length; d++) {
+      var dr = DIRS[d][0], dc = DIRS[d][1];
+      var line = [[r, c]], k, rr, cc;
+      for (k = 1; ; k++) { rr = r + dr * k; cc = c + dc * k; if (rr < 0 || cc < 0 || rr >= size || cc >= size || board[rr * size + cc] !== p) break; line.push([rr, cc]); }
+      for (k = 1; ; k++) { rr = r - dr * k; cc = c - dc * k; if (rr < 0 || cc < 0 || rr >= size || cc >= size || board[rr * size + cc] !== p) break; line.unshift([rr, cc]); }
+      if (line.length >= winLen) return line;
     }
-    return { kind: 'excluded' };
+    return [];
   }
 
-  // 평균: 합 ÷ 개수를 소수 셋째 자리에서 반올림(0.5는 올림)해 둘째 자리까지. 정수 연산으로 부동소수점 오차를 피한다.
-  function formatMean(sum, count) {
-    if (count === 0) return '-';
-    var hundredths = Math.floor((sum * 200 + count) / (2 * count));
-    var whole = Math.floor(hundredths / 100);
-    var frac = String(hundredths % 100);
-    if (frac.length < 2) frac = '0' + frac;
-    return whole + '.' + frac;
-  }
-
-  // 붙여넣은 텍스트 → { rowCount, items: [{name, valid, mean, blank, excluded}] }
-  function tally(text) {
-    var lines = String(text).split(/\r\n|\n|\r/);
-    // 내용 없는 줄은 건너뛴다(탭이 있는 줄은 응답 줄로 본다).
-    lines = lines.filter(function (l) { return l.trim() !== '' || l.indexOf('\t') !== -1; });
-    if (lines.length === 0) return { rowCount: 0, items: [] };
-
-    var header = lines[0].split('\t').slice(1); // 첫 열(응답번호)은 집계하지 않는다.
-    var items = header.map(function (name, i) {
-      var label = name.trim();
-      return { name: label === '' ? '(제목 없음 ' + (i + 1) + ')' : label, valid: 0, sum: 0, blank: 0, excluded: 0 };
-    });
-
-    var rows = lines.slice(1);
-    rows.forEach(function (line) {
-      var cells = line.split('\t').slice(1);
-      for (var i = 0; i < items.length; i++) {
-        var c = parseCell(cells[i]); // 모자란 칸은 undefined → 빈 응답
-        if (c.kind === 'valid') { items[i].valid++; items[i].sum += c.value; }
-        else if (c.kind === 'blank') items[i].blank++;
-        else items[i].excluded++;
-      }
-    });
-
+  // 돌을 둔 새 상태를 돌려준다(원본은 바꾸지 않는다). 둘 수 없으면 같은 상태를 그대로 돌려준다.
+  function place(state, r, c) {
+    var n = state.size;
+    if (state.winner || state.draw) return state;
+    if (!(r >= 0 && c >= 0 && r < n && c < n) || r % 1 !== 0 || c % 1 !== 0) return state;
+    if (state.board[r * n + c] !== 0) return state;
+    var board = state.board.slice();
+    board[r * n + c] = state.turn;
+    var line = findLine(board, n, state.winLen, r, c);
+    var moves = state.moves.concat([[r, c]]);
+    var full = moves.length === n * n;
     return {
-      rowCount: rows.length,
-      items: items.map(function (it) {
-        return { name: it.name, valid: it.valid, mean: formatMean(it.sum, it.valid), blank: it.blank, excluded: it.excluded };
-      })
+      size: n, winLen: state.winLen, board: board,
+      turn: state.turn === 1 ? 2 : 1,
+      winner: line.length ? state.turn : 0,
+      line: line, draw: !line.length && full, moves: moves
     };
   }
 
-  return { parseCell: parseCell, formatMean: formatMean, tally: tally };
+  // 마지막 수를 물린 새 상태(수 기록을 다시 재생한다).
+  function undo(state) {
+    if (state.moves.length === 0) return state;
+    var s = create(state.size, state.winLen);
+    for (var i = 0; i < state.moves.length - 1; i++) s = place(s, state.moves[i][0], state.moves[i][1]);
+    return s;
+  }
+
+  return { create: create, place: place, undo: undo };
 })();
 </script>
 <script>
 (function () {
   'use strict';
-  var input = document.getElementById('input');
-  var rows = document.getElementById('rows');
-  var result = document.getElementById('result');
-  var status = document.getElementById('status');
+  var SIZE = 10;
+  var boardEl = document.getElementById('board');
+  var statusEl = document.getElementById('status');
+  var modeEl = document.getElementById('mode');
+  var state, cells = [];
+  var NAME = { 1: '흑', 2: '백' };
 
-  function cell(tag, text) {
-    var el = document.createElement(tag);
-    el.textContent = text; // 붙여넣은 값은 항상 글자로만 넣는다.
-    return el;
+  function build() {
+    boardEl.textContent = '';
+    cells = [];
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cell';
+        b.setAttribute('role', 'gridcell');
+        b.dataset.r = r; b.dataset.c = c;
+        var s = document.createElement('span');
+        s.className = 'stone'; s.hidden = true;
+        b.appendChild(s);
+        boardEl.appendChild(b);
+        cells.push(b);
+      }
+    }
   }
 
   function render() {
-    var r = Tally.tally(input.value);
-    rows.textContent = '';
-    if (r.items.length === 0) {
-      result.hidden = true;
-      status.textContent = input.value.trim() === '' ? '' : '문항을 찾지 못했습니다. 머리글 줄(첫 줄)까지 함께 붙여넣었는지 확인하세요.';
-      return;
-    }
-    r.items.forEach(function (it) {
-      var tr = document.createElement('tr');
-      tr.appendChild(cell('td', it.name));
-      tr.appendChild(cell('td', String(it.valid)));
-      tr.appendChild(cell('td', it.mean));
-      tr.appendChild(cell('td', String(it.blank)));
-      tr.appendChild(cell('td', String(it.excluded)));
-      rows.appendChild(tr);
+    var last = state.moves.length ? state.moves[state.moves.length - 1] : null;
+    var winSet = {};
+    state.line.forEach(function (p) { winSet[p[0] * SIZE + p[1]] = true; });
+    var over = state.winner || state.draw;
+    cells.forEach(function (b, i) {
+      var v = state.board[i], r = Math.floor(i / SIZE), c = i % SIZE;
+      b.className = 'cell' + (v ? ' s' + v : '') + (last && last[0] === r && last[1] === c ? ' last' : '') + (winSet[i] ? ' win' : '');
+      b.firstChild.hidden = !v;
+      b.disabled = !!(v || over);
+      b.setAttribute('aria-label', (r + 1) + '행 ' + (c + 1) + '열' + (v ? ' ' + NAME[v] : ' 빈 칸'));
     });
-    result.hidden = false;
-    status.textContent = '응답 ' + r.rowCount + '건 · 문항 ' + r.items.length + '개';
+    statusEl.textContent = state.winner ? NAME[state.winner] + ' 승리!' : state.draw ? '무승부입니다.' : NAME[state.turn] + ' 차례';
   }
 
-  input.addEventListener('input', render);
-  document.getElementById('clear').addEventListener('click', function () {
-    input.value = '';
+  function reset() { state = Game.create(SIZE, Number(modeEl.value)); render(); }
+
+  boardEl.addEventListener('click', function (e) {
+    var b = e.target.closest('.cell');
+    if (!b) return;
+    state = Game.place(state, Number(b.dataset.r), Number(b.dataset.c));
     render();
-    input.focus();
   });
-  render();
+  document.getElementById('undo').addEventListener('click', function () { state = Game.undo(state); render(); });
+  document.getElementById('reset').addEventListener('click', reset);
+  modeEl.addEventListener('change', reset);
+  build();
+  reset();
 })();
 </script>
 </body>
